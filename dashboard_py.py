@@ -1,452 +1,369 @@
-{
-  "cells": [
-    {
-      "cell_type": "markdown",
-      "metadata": {
-        "id": "view-in-github",
-        "colab_type": "text"
-      },
-      "source": [
-        "<a href=\"https://colab.research.google.com/github/Developer1503/ai_enhanced_dashboard/blob/main/dashboard_py.ipynb\" target=\"_parent\"><img src=\"https://colab.research.google.com/assets/colab-badge.svg\" alt=\"Open In Colab\"/></a>"
-      ]
-    },
-    {
-      "cell_type": "code",
-      "execution_count": 18,
-      "metadata": {
-        "colab": {
-          "base_uri": "https://localhost:8080/",
-          "height": 671
-        },
-        "id": "jf6R5s4ADoAc",
-        "outputId": "5904dd29-5acf-49ab-9a8b-2e38ec3443b9"
-      },
-      "outputs": [
-        {
-          "output_type": "display_data",
-          "data": {
-            "text/plain": [
-              "<IPython.core.display.Javascript object>"
-            ],
-            "application/javascript": [
-              "(async (port, path, width, height, cache, element) => {\n",
-              "    if (!google.colab.kernel.accessAllowed && !cache) {\n",
-              "      return;\n",
-              "    }\n",
-              "    element.appendChild(document.createTextNode(''));\n",
-              "    const url = await google.colab.kernel.proxyPort(port, {cache});\n",
-              "    const iframe = document.createElement('iframe');\n",
-              "    iframe.src = new URL(path, url).toString();\n",
-              "    iframe.height = height;\n",
-              "    iframe.width = width;\n",
-              "    iframe.style.border = 0;\n",
-              "    iframe.allow = [\n",
-              "        'accelerometer',\n",
-              "        'autoplay',\n",
-              "        'camera',\n",
-              "        'clipboard-read',\n",
-              "        'clipboard-write',\n",
-              "        'gyroscope',\n",
-              "        'magnetometer',\n",
-              "        'microphone',\n",
-              "        'serial',\n",
-              "        'usb',\n",
-              "        'xr-spatial-tracking',\n",
-              "    ].join('; ');\n",
-              "    element.appendChild(iframe);\n",
-              "  })(8050, \"/\", \"100%\", 650, false, window.element)"
+!pip install dash
+!pip install dash-bootstrap-components
+import dash
+from dash import dcc, html
+from dash.dependencies import Input, Output, State
+import dash_bootstrap_components as dbc
+import pandas as pd
+import plotly.express as px
+import numpy as np
+from datetime import datetime, timedelta
+import sqlite3
+import io
+import urllib.parse
+
+# Generate synthetic data
+start_date = datetime(2023, 1, 1)
+dates = [start_date + timedelta(days=i) for i in range(365)]
+cash_flows = np.random.uniform(1000, 5000, size=365)  # Random values between 1000 and 5000
+
+# Additional attributes
+categories = ["Revenue", "Expense", "Investment"]
+transaction_types = ["Credit", "Debit"]
+regions = ["North", "South", "East", "West"]
+account_types = ["Savings", "Current"]
+seasonality_indices = [round(np.sin(2 * np.pi * i / 365) + 1, 2) for i in range(365)]  # Simulate seasonality
+payment_delays = np.random.randint(0, 15, size=365)  # Payment delays in days
+discounts_applied = np.random.uniform(0, 20, size=365)  # Discounts in percentage
+
+# Create DataFrame
+data = pd.DataFrame({
+    "Date": dates,
+    "Daily Cash Flow": cash_flows,
+    "Category": np.random.choice(categories, size=365),
+    "Transaction Type": np.random.choice(transaction_types, size=365),
+    "Region": np.random.choice(regions, size=365),
+    "Account Type": np.random.choice(account_types, size=365),
+    "Seasonality Index": seasonality_indices,
+    "Payment Delay (days)": payment_delays,
+    "Discount Applied (%)": discounts_applied
+})
+
+# Save data to SQLite database
+conn = sqlite3.connect('cash_flow_data.db')
+data.to_sql('cash_flow', conn, if_exists='replace', index=False)
+conn.close()
+
+# Initialize the Dash app
+app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
+app.title = "Enhanced Cash Flow Dashboard"
+
+# Layout of the dashboard
+app.layout = dbc.Container(
+    [
+        dbc.Row(
+            dbc.Col(
+                html.H1("Enhanced Cash Flow Dashboard", style={"text-align": "center", "color": "#2c3e50"}),
+                width=12
+            )
+        ),
+        dbc.Row(
+            [
+                dbc.Col(
+                    dbc.Card(
+                        dbc.CardBody(
+                            [
+                                html.H4("Filters", className="card-title"),
+                                html.Div([
+                                    html.Label("Select Categories:", style={"font-weight": "bold"}),
+                                    dcc.Dropdown(
+                                        id="category-dropdown",
+                                        multi=True,
+                                        style={"width": "100%"}
+                                    ),
+                                ], style={"padding": "10px"}),
+                                html.Div([
+                                    html.Label("Select Regions:", style={"font-weight": "bold"}),
+                                    dcc.Dropdown(
+                                        id="region-dropdown",
+                                        multi=True,
+                                        style={"width": "100%"}
+                                    ),
+                                ], style={"padding": "10px"}),
+                                html.Div([
+                                    html.Label("Select Transaction Types:", style={"font-weight": "bold"}),
+                                    dcc.Dropdown(
+                                        id="transaction-type-dropdown",
+                                        multi=True,
+                                        style={"width": "100%"}
+                                    ),
+                                ], style={"padding": "10px"}),
+                                html.Div([
+                                    html.Label("Select Date Range:", style={"font-weight": "bold"}),
+                                    dcc.DatePickerRange(
+                                        id="date-range-picker",
+                                        start_date=data["Date"].min(),
+                                        end_date=data["Date"].max(),
+                                        display_format="YYYY-MM-DD",
+                                        style={"width": "100%"}
+                                    ),
+                                ], style={"padding": "10px"}),
+                                html.Div([
+                                    html.Label("Select Date Granularity:", style={"font-weight": "bold"}),
+                                    dcc.RadioItems(
+                                        id="date-granularity-radio",
+                                        options=[
+                                            {"label": "Daily", "value": "D"},
+                                            {"label": "Weekly", "value": "W"},
+                                            {"label": "Monthly", "value": "M"},
+                                            {"label": "Quarterly", "value": "Q"}
+                                        ],
+                                        value="D",
+                                        labelStyle={"display": "inline-block", "margin-right": "10px"}
+                                    ),
+                                ], style={"padding": "10px"}),
+                                html.Div([
+                                    html.Label("Filter by Discount Applied (%):", style={"font-weight": "bold"}),
+                                    dcc.RangeSlider(
+                                        id="discount-slider",
+                                        min=0,
+                                        max=20,
+                                        step=1,
+                                        value=[0, 20],
+                                        marks={i: str(i) for i in range(0, 21, 5)}
+                                    ),
+                                ], style={"padding": "10px"}),
+                                html.Div([
+                                    html.Label("Filter by Payment Delay (days):", style={"font-weight": "bold"}),
+                                    dcc.RangeSlider(
+                                        id="delay-slider",
+                                        min=0,
+                                        max=15,
+                                        step=1,
+                                        value=[0, 15],
+                                        marks={i: str(i) for i in range(0, 16, 3)}
+                                    ),
+                                ], style={"padding": "10px"}),
+                                html.Div([
+                                    html.Label("Select Theme:", style={"font-weight": "bold"}),
+                                    dcc.Dropdown(
+                                        id="theme-dropdown",
+                                        options=[
+                                            {"label": "Light", "value": "plotly_white"},
+                                            {"label": "Dark", "value": "plotly_dark"},
+                                            {"label": "Solar", "value": "solar"},
+                                            {"label": "Cyborg", "value": "cyborg"}
+                                        ],
+                                        value="plotly_white",
+                                        style={"width": "100%"}
+                                    ),
+                                ], style={"padding": "10px"}),
+                                html.Div([
+                                    html.Button("Export Data to CSV", id="export-csv-button", n_clicks=0),
+                                    dcc.Download(id="download-dataframe-csv"),
+                                ], style={"padding": "10px"}),
+                                html.Div([
+                                    html.Button("Export Data to Excel", id="export-excel-button", n_clicks=0),
+                                    dcc.Download(id="download-dataframe-excel"),
+                                ], style={"padding": "10px"}),
+                            ]
+                        ),
+                        style={"width": "100%"}
+                    ),
+                    width=3
+                ),
+                dbc.Col(
+                    [
+                        dcc.Store(id="filtered-data"),
+                        dcc.Graph(id="cash-flow-graph", style={"width": "100%", "padding": "10px"}),
+                        dcc.Graph(id="feature-comparison-graph", style={"width": "100%", "padding": "10px"}),
+                        dcc.Graph(id="payment-delay-histogram", style={"width": "100%", "padding": "10px"}),
+                        dcc.Graph(id="cash-flow-by-category-bar", style={"width": "100%", "padding": "10px"}),
+                        dcc.Graph(id="transaction-type-pie", style={"width": "100%", "padding": "10px"}),
+                        dcc.Graph(id="seasonality-heatmap", style={"width": "100%", "padding": "10px"}),
+                        dcc.Graph(id="payment-delay-box", style={"width": "100%", "padding": "10px"}),
+                        html.Div(id="summary-stats", style={"text-align": "center", "margin-top": "20px", "font-size": "18px"}),
+                    ],
+                    width=9
+                ),
             ]
-          },
-          "metadata": {}
-        }
-      ],
-      "source": [
-        "!pip install dash\n",
-        "!pip install dash-bootstrap-components\n",
-        "import dash\n",
-        "from dash import dcc, html\n",
-        "from dash.dependencies import Input, Output, State\n",
-        "import dash_bootstrap_components as dbc\n",
-        "import pandas as pd\n",
-        "import plotly.express as px\n",
-        "import numpy as np\n",
-        "from datetime import datetime, timedelta\n",
-        "import sqlite3\n",
-        "import io\n",
-        "import urllib.parse\n",
-        "\n",
-        "# Generate synthetic data\n",
-        "start_date = datetime(2023, 1, 1)\n",
-        "dates = [start_date + timedelta(days=i) for i in range(365)]\n",
-        "cash_flows = np.random.uniform(1000, 5000, size=365)  # Random values between 1000 and 5000\n",
-        "\n",
-        "# Additional attributes\n",
-        "categories = [\"Revenue\", \"Expense\", \"Investment\"]\n",
-        "transaction_types = [\"Credit\", \"Debit\"]\n",
-        "regions = [\"North\", \"South\", \"East\", \"West\"]\n",
-        "account_types = [\"Savings\", \"Current\"]\n",
-        "seasonality_indices = [round(np.sin(2 * np.pi * i / 365) + 1, 2) for i in range(365)]  # Simulate seasonality\n",
-        "payment_delays = np.random.randint(0, 15, size=365)  # Payment delays in days\n",
-        "discounts_applied = np.random.uniform(0, 20, size=365)  # Discounts in percentage\n",
-        "\n",
-        "# Create DataFrame\n",
-        "data = pd.DataFrame({\n",
-        "    \"Date\": dates,\n",
-        "    \"Daily Cash Flow\": cash_flows,\n",
-        "    \"Category\": np.random.choice(categories, size=365),\n",
-        "    \"Transaction Type\": np.random.choice(transaction_types, size=365),\n",
-        "    \"Region\": np.random.choice(regions, size=365),\n",
-        "    \"Account Type\": np.random.choice(account_types, size=365),\n",
-        "    \"Seasonality Index\": seasonality_indices,\n",
-        "    \"Payment Delay (days)\": payment_delays,\n",
-        "    \"Discount Applied (%)\": discounts_applied\n",
-        "})\n",
-        "\n",
-        "# Save data to SQLite database\n",
-        "conn = sqlite3.connect('cash_flow_data.db')\n",
-        "data.to_sql('cash_flow', conn, if_exists='replace', index=False)\n",
-        "conn.close()\n",
-        "\n",
-        "# Initialize the Dash app\n",
-        "app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])\n",
-        "app.title = \"Enhanced Cash Flow Dashboard\"\n",
-        "\n",
-        "# Layout of the dashboard\n",
-        "app.layout = dbc.Container(\n",
-        "    [\n",
-        "        dbc.Row(\n",
-        "            dbc.Col(\n",
-        "                html.H1(\"Enhanced Cash Flow Dashboard\", style={\"text-align\": \"center\", \"color\": \"#2c3e50\"}),\n",
-        "                width=12\n",
-        "            )\n",
-        "        ),\n",
-        "        dbc.Row(\n",
-        "            [\n",
-        "                dbc.Col(\n",
-        "                    dbc.Card(\n",
-        "                        dbc.CardBody(\n",
-        "                            [\n",
-        "                                html.H4(\"Filters\", className=\"card-title\"),\n",
-        "                                html.Div([\n",
-        "                                    html.Label(\"Select Categories:\", style={\"font-weight\": \"bold\"}),\n",
-        "                                    dcc.Dropdown(\n",
-        "                                        id=\"category-dropdown\",\n",
-        "                                        multi=True,\n",
-        "                                        style={\"width\": \"100%\"}\n",
-        "                                    ),\n",
-        "                                ], style={\"padding\": \"10px\"}),\n",
-        "                                html.Div([\n",
-        "                                    html.Label(\"Select Regions:\", style={\"font-weight\": \"bold\"}),\n",
-        "                                    dcc.Dropdown(\n",
-        "                                        id=\"region-dropdown\",\n",
-        "                                        multi=True,\n",
-        "                                        style={\"width\": \"100%\"}\n",
-        "                                    ),\n",
-        "                                ], style={\"padding\": \"10px\"}),\n",
-        "                                html.Div([\n",
-        "                                    html.Label(\"Select Transaction Types:\", style={\"font-weight\": \"bold\"}),\n",
-        "                                    dcc.Dropdown(\n",
-        "                                        id=\"transaction-type-dropdown\",\n",
-        "                                        multi=True,\n",
-        "                                        style={\"width\": \"100%\"}\n",
-        "                                    ),\n",
-        "                                ], style={\"padding\": \"10px\"}),\n",
-        "                                html.Div([\n",
-        "                                    html.Label(\"Select Date Range:\", style={\"font-weight\": \"bold\"}),\n",
-        "                                    dcc.DatePickerRange(\n",
-        "                                        id=\"date-range-picker\",\n",
-        "                                        start_date=data[\"Date\"].min(),\n",
-        "                                        end_date=data[\"Date\"].max(),\n",
-        "                                        display_format=\"YYYY-MM-DD\",\n",
-        "                                        style={\"width\": \"100%\"}\n",
-        "                                    ),\n",
-        "                                ], style={\"padding\": \"10px\"}),\n",
-        "                                html.Div([\n",
-        "                                    html.Label(\"Select Date Granularity:\", style={\"font-weight\": \"bold\"}),\n",
-        "                                    dcc.RadioItems(\n",
-        "                                        id=\"date-granularity-radio\",\n",
-        "                                        options=[\n",
-        "                                            {\"label\": \"Daily\", \"value\": \"D\"},\n",
-        "                                            {\"label\": \"Weekly\", \"value\": \"W\"},\n",
-        "                                            {\"label\": \"Monthly\", \"value\": \"M\"},\n",
-        "                                            {\"label\": \"Quarterly\", \"value\": \"Q\"}\n",
-        "                                        ],\n",
-        "                                        value=\"D\",\n",
-        "                                        labelStyle={\"display\": \"inline-block\", \"margin-right\": \"10px\"}\n",
-        "                                    ),\n",
-        "                                ], style={\"padding\": \"10px\"}),\n",
-        "                                html.Div([\n",
-        "                                    html.Label(\"Filter by Discount Applied (%):\", style={\"font-weight\": \"bold\"}),\n",
-        "                                    dcc.RangeSlider(\n",
-        "                                        id=\"discount-slider\",\n",
-        "                                        min=0,\n",
-        "                                        max=20,\n",
-        "                                        step=1,\n",
-        "                                        value=[0, 20],\n",
-        "                                        marks={i: str(i) for i in range(0, 21, 5)}\n",
-        "                                    ),\n",
-        "                                ], style={\"padding\": \"10px\"}),\n",
-        "                                html.Div([\n",
-        "                                    html.Label(\"Filter by Payment Delay (days):\", style={\"font-weight\": \"bold\"}),\n",
-        "                                    dcc.RangeSlider(\n",
-        "                                        id=\"delay-slider\",\n",
-        "                                        min=0,\n",
-        "                                        max=15,\n",
-        "                                        step=1,\n",
-        "                                        value=[0, 15],\n",
-        "                                        marks={i: str(i) for i in range(0, 16, 3)}\n",
-        "                                    ),\n",
-        "                                ], style={\"padding\": \"10px\"}),\n",
-        "                                html.Div([\n",
-        "                                    html.Label(\"Select Theme:\", style={\"font-weight\": \"bold\"}),\n",
-        "                                    dcc.Dropdown(\n",
-        "                                        id=\"theme-dropdown\",\n",
-        "                                        options=[\n",
-        "                                            {\"label\": \"Light\", \"value\": \"plotly_white\"},\n",
-        "                                            {\"label\": \"Dark\", \"value\": \"plotly_dark\"},\n",
-        "                                            {\"label\": \"Solar\", \"value\": \"solar\"},\n",
-        "                                            {\"label\": \"Cyborg\", \"value\": \"cyborg\"}\n",
-        "                                        ],\n",
-        "                                        value=\"plotly_white\",\n",
-        "                                        style={\"width\": \"100%\"}\n",
-        "                                    ),\n",
-        "                                ], style={\"padding\": \"10px\"}),\n",
-        "                                html.Div([\n",
-        "                                    html.Button(\"Export Data to CSV\", id=\"export-csv-button\", n_clicks=0),\n",
-        "                                    dcc.Download(id=\"download-dataframe-csv\"),\n",
-        "                                ], style={\"padding\": \"10px\"}),\n",
-        "                                html.Div([\n",
-        "                                    html.Button(\"Export Data to Excel\", id=\"export-excel-button\", n_clicks=0),\n",
-        "                                    dcc.Download(id=\"download-dataframe-excel\"),\n",
-        "                                ], style={\"padding\": \"10px\"}),\n",
-        "                            ]\n",
-        "                        ),\n",
-        "                        style={\"width\": \"100%\"}\n",
-        "                    ),\n",
-        "                    width=3\n",
-        "                ),\n",
-        "                dbc.Col(\n",
-        "                    [\n",
-        "                        dcc.Store(id=\"filtered-data\"),\n",
-        "                        dcc.Graph(id=\"cash-flow-graph\", style={\"width\": \"100%\", \"padding\": \"10px\"}),\n",
-        "                        dcc.Graph(id=\"feature-comparison-graph\", style={\"width\": \"100%\", \"padding\": \"10px\"}),\n",
-        "                        dcc.Graph(id=\"payment-delay-histogram\", style={\"width\": \"100%\", \"padding\": \"10px\"}),\n",
-        "                        dcc.Graph(id=\"cash-flow-by-category-bar\", style={\"width\": \"100%\", \"padding\": \"10px\"}),\n",
-        "                        dcc.Graph(id=\"transaction-type-pie\", style={\"width\": \"100%\", \"padding\": \"10px\"}),\n",
-        "                        dcc.Graph(id=\"seasonality-heatmap\", style={\"width\": \"100%\", \"padding\": \"10px\"}),\n",
-        "                        dcc.Graph(id=\"payment-delay-box\", style={\"width\": \"100%\", \"padding\": \"10px\"}),\n",
-        "                        html.Div(id=\"summary-stats\", style={\"text-align\": \"center\", \"margin-top\": \"20px\", \"font-size\": \"18px\"}),\n",
-        "                    ],\n",
-        "                    width=9\n",
-        "                ),\n",
-        "            ]\n",
-        "        ),\n",
-        "    ],\n",
-        "    fluid=True\n",
-        ")\n",
-        "\n",
-        "# Callbacks for interactivity\n",
-        "@app.callback(\n",
-        "    [Output(\"category-dropdown\", \"options\"),\n",
-        "     Output(\"region-dropdown\", \"options\"),\n",
-        "     Output(\"transaction-type-dropdown\", \"options\")],\n",
-        "    [Input(\"date-range-picker\", \"start_date\"),\n",
-        "     Input(\"date-range-picker\", \"end_date\")]\n",
-        ")\n",
-        "def update_filter_options(start_date, end_date):\n",
-        "    conn = sqlite3.connect('cash_flow_data.db')\n",
-        "    query = f\"\"\"\n",
-        "    SELECT DISTINCT Category, Region, \"Transaction Type\"\n",
-        "    FROM cash_flow\n",
-        "    WHERE Date BETWEEN ? AND ?\n",
-        "    \"\"\"\n",
-        "    params = [start_date, end_date]\n",
-        "    filtered_data = pd.read_sql_query(query, conn, params=params)\n",
-        "    conn.close()\n",
-        "\n",
-        "    category_options = [{\"label\": category, \"value\": category} for category in filtered_data[\"Category\"].unique()]\n",
-        "    region_options = [{\"label\": region, \"value\": region} for region in filtered_data[\"Region\"].unique()]\n",
-        "    transaction_type_options = [{\"label\": ttype, \"value\": ttype} for ttype in filtered_data[\"Transaction Type\"].unique()]\n",
-        "\n",
-        "    return category_options, region_options, transaction_type_options\n",
-        "\n",
-        "@app.callback(\n",
-        "    Output(\"filtered-data\", \"data\"),\n",
-        "    [Input(\"category-dropdown\", \"value\"),\n",
-        "     Input(\"region-dropdown\", \"value\"),\n",
-        "     Input(\"transaction-type-dropdown\", \"value\"),\n",
-        "     Input(\"date-range-picker\", \"start_date\"),\n",
-        "     Input(\"date-range-picker\", \"end_date\"),\n",
-        "     Input(\"date-granularity-radio\", \"value\"),\n",
-        "     Input(\"discount-slider\", \"value\"),\n",
-        "     Input(\"delay-slider\", \"value\")]\n",
-        ")\n",
-        "def filter_data(selected_categories, selected_regions, selected_transaction_types, start_date, end_date, date_granularity, discount_range, delay_range):\n",
-        "    conn = sqlite3.connect('cash_flow_data.db')\n",
-        "    query = f\"\"\"\n",
-        "    SELECT * FROM cash_flow\n",
-        "    WHERE Category IN ({','.join(['?']*len(selected_categories))})\n",
-        "    AND Region IN ({','.join(['?']*len(selected_regions))})\n",
-        "    AND \"Transaction Type\" IN ({','.join(['?']*len(selected_transaction_types))})\n",
-        "    AND Date BETWEEN ? AND ?\n",
-        "    AND \"Discount Applied (%)\" BETWEEN ? AND ?\n",
-        "    AND \"Payment Delay (days)\" BETWEEN ? AND ?\n",
-        "    \"\"\"\n",
-        "    params = selected_categories + selected_regions + selected_transaction_types + [start_date, end_date] + discount_range + delay_range\n",
-        "    filtered_data = pd.read_sql_query(query, conn, params=params)\n",
-        "\n",
-        "    if date_granularity != \"D\":\n",
-        "        filtered_data = filtered_data.resample(date_granularity, on=\"Date\").sum().reset_index()\n",
-        "\n",
-        "    conn.close()\n",
-        "    return filtered_data.to_dict('records')\n",
-        "\n",
-        "@app.callback(\n",
-        "    [Output(\"cash-flow-graph\", \"figure\"),\n",
-        "     Output(\"feature-comparison-graph\", \"figure\"),\n",
-        "     Output(\"payment-delay-histogram\", \"figure\"),\n",
-        "     Output(\"cash-flow-by-category-bar\", \"figure\"),\n",
-        "     Output(\"transaction-type-pie\", \"figure\"),\n",
-        "     Output(\"seasonality-heatmap\", \"figure\"),\n",
-        "     Output(\"payment-delay-box\", \"figure\"),\n",
-        "     Output(\"summary-stats\", \"children\")],\n",
-        "    [Input(\"filtered-data\", \"data\"),\n",
-        "     Input(\"theme-dropdown\", \"value\")]\n",
-        ")\n",
-        "def update_graphs(filtered_data, theme):\n",
-        "    filtered_data = pd.DataFrame(filtered_data)\n",
-        "    template = theme\n",
-        "\n",
-        "    # Cash flow graph\n",
-        "    cash_flow_fig = px.line(\n",
-        "        filtered_data,\n",
-        "        x=\"Date\",\n",
-        "        y=\"Daily Cash Flow\",\n",
-        "        title=\"Daily Cash Flow\",\n",
-        "        labels={\"Daily Cash Flow\": \"Cash Flow (USD)\", \"Date\": \"Date\"},\n",
-        "        template=template\n",
-        "    )\n",
-        "    cash_flow_fig.update_layout(hovermode=\"x unified\")\n",
-        "\n",
-        "    # Feature comparison graph\n",
-        "    feature_comparison_fig = px.scatter(\n",
-        "        filtered_data,\n",
-        "        x=\"Seasonality Index\",\n",
-        "        y=\"Daily Cash Flow\",\n",
-        "        color=\"Transaction Type\",\n",
-        "        size=\"Discount Applied (%)\",\n",
-        "        title=\"Feature Comparison: Seasonality vs Cash Flow\",\n",
-        "        labels={\"Seasonality Index\": \"Seasonality Index\", \"Daily Cash Flow\": \"Cash Flow (USD)\"},\n",
-        "        template=template\n",
-        "    )\n",
-        "\n",
-        "    # Payment delay histogram\n",
-        "    payment_delay_fig = px.histogram(\n",
-        "        filtered_data,\n",
-        "        x=\"Payment Delay (days)\",\n",
-        "        nbins=15,\n",
-        "        title=\"Payment Delay Distribution\",\n",
-        "        labels={\"Payment Delay (days)\": \"Payment Delay (days)\"},\n",
-        "        template=template\n",
-        "    )\n",
-        "    payment_delay_fig.update_layout(bargap=0.1)\n",
-        "\n",
-        "    # Bar chart for daily cash flow by category\n",
-        "    cash_flow_by_category_fig = px.bar(\n",
-        "        filtered_data,\n",
-        "        x=\"Category\",\n",
-        "        y=\"Daily Cash Flow\",\n",
-        "        title=\"Daily Cash Flow by Category\",\n",
-        "        labels={\"Daily Cash Flow\": \"Cash Flow (USD)\", \"Category\": \"Category\"},\n",
-        "        template=template\n",
-        "    )\n",
-        "\n",
-        "    # Pie chart for transaction types\n",
-        "    transaction_type_pie_fig = px.pie(\n",
-        "        filtered_data,\n",
-        "        names=\"Transaction Type\",\n",
-        "        title=\"Transaction Type Distribution\",\n",
-        "        template=template\n",
-        "    )\n",
-        "\n",
-        "    # Heatmap for seasonality index vs. daily cash flow\n",
-        "    seasonality_heatmap_fig = px.density_heatmap(\n",
-        "        filtered_data,\n",
-        "        x=\"Seasonality Index\",\n",
-        "        y=\"Daily Cash Flow\",\n",
-        "        title=\"Heatmap: Seasonality Index vs Cash Flow\",\n",
-        "        labels={\"Seasonality Index\": \"Seasonality Index\", \"Daily Cash Flow\": \"Cash Flow (USD)\"},\n",
-        "        template=template\n",
-        "    )\n",
-        "\n",
-        "    # Box plot for payment delays\n",
-        "    payment_delay_box_fig = px.box(\n",
-        "        filtered_data,\n",
-        "        x=\"Payment Delay (days)\",\n",
-        "        title=\"Payment Delay Distribution (Box Plot)\",\n",
-        "        labels={\"Payment Delay (days)\": \"Payment Delay (days)\"},\n",
-        "        template=template\n",
-        "    )\n",
-        "\n",
-        "    # Summary statistics\n",
-        "    total_cash_flow = filtered_data[\"Daily Cash Flow\"].sum()\n",
-        "    average_payment_delay = filtered_data[\"Payment Delay (days)\"].mean()\n",
-        "    summary_stats = html.Div([\n",
-        "        html.H3(\"Summary Statistics\", style={\"color\": \"#ecf0f1\" if theme == \"plotly_dark\" else \"#2c3e50\"}),\n",
-        "        html.P(f\"Total Cash Flow: ${total_cash_flow:.2f}\", style={\"color\": \"#ecf0f1\" if theme == \"plotly_dark\" else \"#2c3e50\"}),\n",
-        "        html.P(f\"Average Payment Delay: {average_payment_delay:.2f} days\", style={\"color\": \"#ecf0f1\" if theme == \"plotly_dark\" else \"#2c3e50\"}),\n",
-        "    ], style={\"background-color\": \"#34495e\" if theme == \"plotly_dark\" else \"#f5f5f5\", \"padding\": \"20px\", \"border-radius\": \"10px\"})\n",
-        "\n",
-        "    return cash_flow_fig, feature_comparison_fig, payment_delay_fig, cash_flow_by_category_fig, transaction_type_pie_fig, seasonality_heatmap_fig, payment_delay_box_fig, summary_stats\n",
-        "\n",
-        "@app.callback(\n",
-        "    Output(\"download-dataframe-csv\", \"data\"),\n",
-        "    Input(\"export-csv-button\", \"n_clicks\"),\n",
-        "    State(\"filtered-data\", \"data\")\n",
-        ")\n",
-        "def export_data_to_csv(n_clicks, filtered_data):\n",
-        "    if n_clicks > 0:\n",
-        "        filtered_data = pd.DataFrame(filtered_data)\n",
-        "        csv_string = filtered_data.to_csv(index=False, encoding='utf-8')\n",
-        "        csv_string = \"data:text/csv;charset=utf-8,\" + urllib.parse.quote(csv_string)\n",
-        "        return dict(content=csv_string, filename=\"filtered_data.csv\")\n",
-        "    return None\n",
-        "\n",
-        "@app.callback(\n",
-        "    Output(\"download-dataframe-excel\", \"data\"),\n",
-        "    Input(\"export-excel-button\", \"n_clicks\"),\n",
-        "    State(\"filtered-data\", \"data\")\n",
-        ")\n",
-        "def export_data_to_excel(n_clicks, filtered_data):\n",
-        "    if n_clicks > 0:\n",
-        "        filtered_data = pd.DataFrame(filtered_data)\n",
-        "        output = io.BytesIO()\n",
-        "        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:\n",
-        "            filtered_data.to_excel(writer, index=False, sheet_name='Sheet1')\n",
-        "        output.seek(0)\n",
-        "        return dict(content=output.getvalue(), filename=\"filtered_data.xlsx\", type=\"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet\")\n",
-        "    return None\n",
-        "\n",
-        "# Run the app\n",
-        "if __name__ == \"__main__\":\n",
-        "    app.run_server(debug=True)\n"
-      ]
-    }
-  ],
-  "metadata": {
-    "colab": {
-      "provenance": [],
-      "authorship_tag": "ABX9TyMm1O6a3W4g5nVfz+EboZfR",
-      "include_colab_link": true
-    },
-    "kernelspec": {
-      "display_name": "Python 3",
-      "name": "python3"
-    },
-    "language_info": {
-      "name": "python"
-    }
-  },
-  "nbformat": 4,
-  "nbformat_minor": 0
-}
+        ),
+    ],
+    fluid=True
+)
+
+# Callbacks for interactivity
+@app.callback(
+    [Output("category-dropdown", "options"),
+     Output("region-dropdown", "options"),
+     Output("transaction-type-dropdown", "options")],
+    [Input("date-range-picker", "start_date"),
+     Input("date-range-picker", "end_date")]
+)
+def update_filter_options(start_date, end_date):
+    conn = sqlite3.connect('cash_flow_data.db')
+    query = f"""
+    SELECT DISTINCT Category, Region, "Transaction Type"
+    FROM cash_flow
+    WHERE Date BETWEEN ? AND ?
+    """
+    params = [start_date, end_date]
+    filtered_data = pd.read_sql_query(query, conn, params=params)
+    conn.close()
+
+    category_options = [{"label": category, "value": category} for category in filtered_data["Category"].unique()]
+    region_options = [{"label": region, "value": region} for region in filtered_data["Region"].unique()]
+    transaction_type_options = [{"label": ttype, "value": ttype} for ttype in filtered_data["Transaction Type"].unique()]
+
+    return category_options, region_options, transaction_type_options
+
+@app.callback(
+    Output("filtered-data", "data"),
+    [Input("category-dropdown", "value"),
+     Input("region-dropdown", "value"),
+     Input("transaction-type-dropdown", "value"),
+     Input("date-range-picker", "start_date"),
+     Input("date-range-picker", "end_date"),
+     Input("date-granularity-radio", "value"),
+     Input("discount-slider", "value"),
+     Input("delay-slider", "value")]
+)
+def filter_data(selected_categories, selected_regions, selected_transaction_types, start_date, end_date, date_granularity, discount_range, delay_range):
+    conn = sqlite3.connect('cash_flow_data.db')
+    query = f"""
+    SELECT * FROM cash_flow
+    WHERE Category IN ({','.join(['?']*len(selected_categories))})
+    AND Region IN ({','.join(['?']*len(selected_regions))})
+    AND "Transaction Type" IN ({','.join(['?']*len(selected_transaction_types))})
+    AND Date BETWEEN ? AND ?
+    AND "Discount Applied (%)" BETWEEN ? AND ?
+    AND "Payment Delay (days)" BETWEEN ? AND ?
+    """
+    params = selected_categories + selected_regions + selected_transaction_types + [start_date, end_date] + discount_range + delay_range
+    filtered_data = pd.read_sql_query(query, conn, params=params)
+
+    if date_granularity != "D":
+        filtered_data = filtered_data.resample(date_granularity, on="Date").sum().reset_index()
+
+    conn.close()
+    return filtered_data.to_dict('records')
+
+@app.callback(
+    [Output("cash-flow-graph", "figure"),
+     Output("feature-comparison-graph", "figure"),
+     Output("payment-delay-histogram", "figure"),
+     Output("cash-flow-by-category-bar", "figure"),
+     Output("transaction-type-pie", "figure"),
+     Output("seasonality-heatmap", "figure"),
+     Output("payment-delay-box", "figure"),
+     Output("summary-stats", "children")],
+    [Input("filtered-data", "data"),
+     Input("theme-dropdown", "value")]
+)
+def update_graphs(filtered_data, theme):
+    filtered_data = pd.DataFrame(filtered_data)
+    template = theme
+
+    # Cash flow graph
+    cash_flow_fig = px.line(
+        filtered_data,
+        x="Date",
+        y="Daily Cash Flow",
+        title="Daily Cash Flow",
+        labels={"Daily Cash Flow": "Cash Flow (USD)", "Date": "Date"},
+        template=template
+    )
+    cash_flow_fig.update_layout(hovermode="x unified")
+
+    # Feature comparison graph
+    feature_comparison_fig = px.scatter(
+        filtered_data,
+        x="Seasonality Index",
+        y="Daily Cash Flow",
+        color="Transaction Type",
+        size="Discount Applied (%)",
+        title="Feature Comparison: Seasonality vs Cash Flow",
+        labels={"Seasonality Index": "Seasonality Index", "Daily Cash Flow": "Cash Flow (USD)"},
+        template=template
+    )
+
+    # Payment delay histogram
+    payment_delay_fig = px.histogram(
+        filtered_data,
+        x="Payment Delay (days)",
+        nbins=15,
+        title="Payment Delay Distribution",
+        labels={"Payment Delay (days)": "Payment Delay (days)"},
+        template=template
+    )
+    payment_delay_fig.update_layout(bargap=0.1)
+
+    # Bar chart for daily cash flow by category
+    cash_flow_by_category_fig = px.bar(
+        filtered_data,
+        x="Category",
+        y="Daily Cash Flow",
+        title="Daily Cash Flow by Category",
+        labels={"Daily Cash Flow": "Cash Flow (USD)", "Category": "Category"},
+        template=template
+    )
+
+    # Pie chart for transaction types
+    transaction_type_pie_fig = px.pie(
+        filtered_data,
+        names="Transaction Type",
+        title="Transaction Type Distribution",
+        template=template
+    )
+
+    # Heatmap for seasonality index vs. daily cash flow
+    seasonality_heatmap_fig = px.density_heatmap(
+        filtered_data,
+        x="Seasonality Index",
+        y="Daily Cash Flow",
+        title="Heatmap: Seasonality Index vs Cash Flow",
+        labels={"Seasonality Index": "Seasonality Index", "Daily Cash Flow": "Cash Flow (USD)"},
+        template=template
+    )
+
+    # Box plot for payment delays
+    payment_delay_box_fig = px.box(
+        filtered_data,
+        x="Payment Delay (days)",
+        title="Payment Delay Distribution (Box Plot)",
+        labels={"Payment Delay (days)": "Payment Delay (days)"},
+        template=template
+    )
+
+    # Summary statistics
+    total_cash_flow = filtered_data["Daily Cash Flow"].sum()
+    average_payment_delay = filtered_data["Payment Delay (days)"].mean()
+    summary_stats = html.Div([
+        html.H3("Summary Statistics", style={"color": "#ecf0f1" if theme == "plotly_dark" else "#2c3e50"}),
+        html.P(f"Total Cash Flow: ${total_cash_flow:.2f}", style={"color": "#ecf0f1" if theme == "plotly_dark" else "#2c3e50"}),
+        html.P(f"Average Payment Delay: {average_payment_delay:.2f} days", style={"color": "#ecf0f1" if theme == "plotly_dark" else "#2c3e50"}),
+    ], style={"background-color": "#34495e" if theme == "plotly_dark" else "#f5f5f5", "padding": "20px", "border-radius": "10px"})
+
+    return cash_flow_fig, feature_comparison_fig, payment_delay_fig, cash_flow_by_category_fig, transaction_type_pie_fig, seasonality_heatmap_fig, payment_delay_box_fig, summary_stats
+
+@app.callback(
+    Output("download-dataframe-csv", "data"),
+    Input("export-csv-button", "n_clicks"),
+    State("filtered-data", "data")
+)
+def export_data_to_csv(n_clicks, filtered_data):
+    if n_clicks > 0:
+        filtered_data = pd.DataFrame(filtered_data)
+        csv_string = filtered_data.to_csv(index=False, encoding='utf-8')
+        csv_string = "data:text/csv;charset=utf-8," + urllib.parse.quote(csv_string)
+        return dict(content=csv_string, filename="filtered_data.csv")
+    return None
+
+@app.callback(
+    Output("download-dataframe-excel", "data"),
+    Input("export-excel-button", "n_clicks"),
+    State("filtered-data", "data")
+)
+def export_data_to_excel(n_clicks, filtered_data):
+    if n_clicks > 0:
+        filtered_data = pd.DataFrame(filtered_data)
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+            filtered_data.to_excel(writer, index=False, sheet_name='Sheet1')
+        output.seek(0)
+        return dict(content=output.getvalue(), filename="filtered_data.xlsx", type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    return None
+
+# Run the app
+if __name__ == "__main__":
+    app.run_server(debug=True)
