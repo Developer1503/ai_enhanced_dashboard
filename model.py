@@ -5,103 +5,136 @@ Created on Sun Dec 15 21:32:52 2024
 @author: VEDANT SHINDE
 """
 
-from sklearn.preprocessing import MinMaxScaler
-from sklearn.ensemble import RandomForestRegressor
-from sklearn.metrics import mean_squared_error
-from sklearn.model_selection import GridSearchCV
-import matplotlib.pyplot as plt
-from datetime import datetime, timedelta
+import dash
+from dash import dcc, html
+from dash.dependencies import Input, Output
+import pandas as pd
+import plotly.express as px
 
-# Generate 365 days of synthetic cash flow data
 start_date = datetime(2023, 1, 1)
 dates = [start_date + timedelta(days=i) for i in range(365)]
 cash_flows = np.random.uniform(1000, 5000, size=365)  # Random values between 1000 and 5000
 
+# Additional attributes
+categories = ["Revenue", "Expense", "Investment"]
+transaction_types = ["Credit", "Debit"]
+regions = ["North", "South", "East", "West"]
+account_types = ["Savings", "Current"]
+seasonality_indices = [round(np.sin(2 * np.pi * i / 365) + 1, 2) for i in range(365)]  # Simulate seasonality
+payment_delays = np.random.randint(0, 15, size=365)  # Payment delays in days
+discounts_applied = np.random.uniform(0, 20, size=365)  # Discounts in percentage
+
 # Create DataFrame
 data = pd.DataFrame({
     "Date": dates,
-    "Daily Cash Flow": cash_flows
+    "Daily Cash Flow": cash_flows,
+    "Category": np.random.choice(categories, size=365),
+    "Transaction Type": np.random.choice(transaction_types, size=365),
+    "Region": np.random.choice(regions, size=365),
+    "Account Type": np.random.choice(account_types, size=365),
+    "Seasonality Index": seasonality_indices,
+    "Payment Delay (days)": payment_delays,
+    "Discount Applied (%)": discounts_applied
 })
 
-# Save to CSV
 data.to_csv("preprocessed_cash_flow.csv", index=False)
-print("Synthetic dataset created: preprocessed_cash_flow.csv")
-
-
-# Load the preprocessed data
+# Load preprocessed data
 data = pd.read_csv("preprocessed_cash_flow.csv")
 data["Date"] = pd.to_datetime(data["Date"])
 
-# Use only the Daily Cash Flow column for forecasting
-cash_flow = data[["Daily Cash Flow"]].values
+# Initialize the Dash app
+app = dash.Dash(__name__)
+app.title = "Enhanced Cash Flow Dashboard"
 
-# Normalize the data
-scaler = MinMaxScaler(feature_range=(0, 1))
-cash_flow_scaled = scaler.fit_transform(cash_flow)
+# Layout of the dashboard
+app.layout = html.Div([
+    html.H1("Enhanced Cash Flow Dashboard", style={"text-align": "center"}),
 
-# Create sequences for the model
-sequence_length = 30  # Use the past 30 days to predict the next day
-X, y = [], []
-for i in range(sequence_length, len(cash_flow_scaled)):
-    X.append(cash_flow_scaled[i-sequence_length:i, 0])
-    y.append(cash_flow_scaled[i, 0])
-X, y = np.array(X), np.array(y)
+    # Dropdown for selecting category
+    html.Div([
+        html.Label("Select Category:"),
+        dcc.Dropdown(
+            id="category-dropdown",
+            options=[{"label": category, "value": category} for category in data["Category"].unique()],
+            value="Revenue",
+            clearable=False,
+        ),
+    ], style={"width": "30%", "display": "inline-block", "padding": "10px"}),
 
-# Split into training and testing sets
-train_size = int(len(X) * 0.8)
-X_train, X_test = X[:train_size], X[train_size:]
-y_train, y_test = y[:train_size], y[train_size:]
+    # Dropdown for selecting region
+    html.Div([
+        html.Label("Select Region:"),
+        dcc.Dropdown(
+            id="region-dropdown",
+            options=[{"label": region, "value": region} for region in data["Region"].unique()],
+            value="North",
+            clearable=False,
+        ),
+    ], style={"width": "30%", "display": "inline-block", "padding": "10px"}),
 
-# Flatten X for RandomForest input
-X_train_flat = X_train.reshape(X_train.shape[0], -1)
-X_test_flat = X_test.reshape(X_test.shape[0], -1)
+    # Graph for daily cash flow
+    dcc.Graph(id="cash-flow-graph"),
 
-# Hyperparameter tuning for Random Forest
-param_grid = {
-    'n_estimators': [50, 100, 200],
-    'max_depth': [None, 10, 20, 30],
-    'min_samples_split': [2, 5, 10],
-    'min_samples_leaf': [1, 2, 4]
-}
-grid_search = GridSearchCV(RandomForestRegressor(random_state=42), param_grid, cv=3, scoring='neg_mean_squared_error', verbose=1, n_jobs=-1)
-grid_search.fit(X_train_flat, y_train)
+    # Graph for feature comparison
+    dcc.Graph(id="feature-comparison-graph"),
 
-# Best model from grid search
-best_model = grid_search.best_estimator_
-print(f"Best Parameters: {grid_search.best_params_}")
+    # Histogram for payment delay
+    dcc.Graph(id="payment-delay-histogram"),
+])
 
-# Train the best model
-best_model.fit(X_train_flat, y_train)
+# Callbacks for interactivity
+@app.callback(
+    Output("cash-flow-graph", "figure"),
+    [Input("category-dropdown", "value"),
+     Input("region-dropdown", "value")]
+)
+def update_cash_flow_graph(selected_category, selected_region):
+    filtered_data = data[(data["Category"] == selected_category) & (data["Region"] == selected_region)]
+    fig = px.line(
+        filtered_data,
+        x="Date",
+        y="Daily Cash Flow",
+        title=f"Daily Cash Flow: {selected_category} in {selected_region}",
+        labels={"Daily Cash Flow": "Cash Flow (USD)", "Date": "Date"}
+    )
+    fig.update_layout(hovermode="x unified")
+    return fig
 
-# Predict on the test set
-predicted_cash_flow = best_model.predict(X_test_flat)
-predicted_cash_flow = scaler.inverse_transform(predicted_cash_flow.reshape(-1, 1))
+@app.callback(
+    Output("feature-comparison-graph", "figure"),
+    [Input("category-dropdown", "value"),
+     Input("region-dropdown", "value")]
+)
+def update_feature_comparison(selected_category, selected_region):
+    filtered_data = data[(data["Category"] == selected_category) & (data["Region"] == selected_region)]
+    fig = px.scatter(
+        filtered_data,
+        x="Seasonality Index",
+        y="Daily Cash Flow",
+        color="Transaction Type",
+        size="Discount Applied (%)",
+        title="Feature Comparison: Seasonality vs Cash Flow",
+        labels={"Seasonality Index": "Seasonality Index", "Daily Cash Flow": "Cash Flow (USD)"}
+    )
+    return fig
 
-# Invert scaling for actual test data
-y_test_actual = scaler.inverse_transform(y_test.reshape(-1, 1))
+@app.callback(
+    Output("payment-delay-histogram", "figure"),
+    [Input("category-dropdown", "value"),
+     Input("region-dropdown", "value")]
+)
+def update_payment_delay_histogram(selected_category, selected_region):
+    filtered_data = data[(data["Category"] == selected_category) & (data["Region"] == selected_region)]
+    fig = px.histogram(
+        filtered_data,
+        x="Payment Delay (days)",
+        nbins=15,
+        title="Payment Delay Distribution",
+        labels={"Payment Delay (days)": "Payment Delay (days)"}
+    )
+    fig.update_layout(bargap=0.1)
+    return fig
 
-# Calculate and display mean squared error
-mse = mean_squared_error(y_test_actual, predicted_cash_flow)
-print(f"Mean Squared Error: {mse}")
-
-# Plot the results
-plt.figure(figsize=(10, 6))
-plt.plot(y_test_actual, color='blue', label='Actual Cash Flow')
-plt.plot(predicted_cash_flow, color='red', label='Predicted Cash Flow')
-plt.title('Cash Flow Prediction')
-plt.xlabel('Time')
-plt.ylabel('Cash Flow')
-plt.legend()
-plt.show()
-
-# Feature importance visualization
-feature_importances = best_model.feature_importances_
-plt.figure(figsize=(10, 6))
-plt.bar(range(len(feature_importances)), feature_importances)
-plt.title('Feature Importance')
-plt.xlabel('Feature (Day Lag)')
-plt.ylabel('Importance')
-plt.show()
-
-print("Model training, predictions, and feature importance visualization completed.")
-
+# Run the app
+if __name__ == "__main__":
+    app.run_server(debug=True)
