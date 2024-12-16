@@ -1,0 +1,39 @@
+# src/model_training.py
+import numpy as np
+from sklearn.preprocessing import MinMaxScaler
+from sklearn.model_selection import train_test_split
+import tensorflow as tf
+from tensorflow.keras.models import Model
+from tensorflow.keras.layers import LSTM, Dense, Input
+import matplotlib.pyplot as plt
+from sklearn.metrics import mean_squared_error
+from datetime import datetime, timedelta
+import os
+
+# Ensure the models directory exists
+os.makedirs("models", exist_ok=True)
+
+# Generate synthetic cash flow data
+start_date = datetime(2023, 1, 1)
+dates = [start_date + timedelta(days=i) for i in range(365)]
+cash_flows = np.random.uniform(1000, 5000, size=365)  # Random values between 1000 and 5000
+
+# Use only the Daily Cash Flow column for forecasting
+cash_flow = cash_flows.reshape(-1, 1)
+
+# Normalize the data
+scaler = MinMaxScaler(feature_range=(0, 1))
+cash_flow_scaled = scaler.fit_transform(cash_flow)
+
+# Create sequences for the model
+sequence_length = 30  # Use the past 30 days to predict the next day
+X, y = [], []
+for i in range(sequence_length, len(cash_flow_scaled)):
+    X.append(cash_flow_scaled[i-sequence_length:i, 0])
+    y.append(cash_flow_scaled[i, 0])
+X, y = np.array(X), np.array(y)
+
+# Split into training and testing sets
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+# Reshape for LST
