@@ -5,7 +5,6 @@ Created on Sun Dec 15 21:32:52 2024
 @author: VEDANT SHINDE
 """
 
-
 !pip install dash
 !pip install dash-bootstrap-components
 import dash
@@ -20,36 +19,12 @@ import sqlite3
 import io
 import urllib.parse
 
-# Generate synthetic data
-start_date = datetime(2023, 1, 1)
-dates = [start_date + timedelta(days=i) for i in range(365)]
-cash_flows = np.random.uniform(1000, 5000, size=365)  # Random values between 1000 and 5000
-
-# Additional attributes
-categories = ["Revenue", "Expense", "Investment"]
-transaction_types = ["Credit", "Debit"]
-regions = ["North", "South", "East", "West"]
-account_types = ["Savings", "Current"]
-seasonality_indices = [round(np.sin(2 * np.pi * i / 365) + 1, 2) for i in range(365)]  # Simulate seasonality
-payment_delays = np.random.randint(0, 15, size=365)  # Payment delays in days
-discounts_applied = np.random.uniform(0, 20, size=365)  # Discounts in percentage
-
-# Create DataFrame
-data = pd.DataFrame({
-    "Date": dates,
-    "Daily Cash Flow": cash_flows,
-    "Category": np.random.choice(categories, size=365),
-    "Transaction Type": np.random.choice(transaction_types, size=365),
-    "Region": np.random.choice(regions, size=365),
-    "Account Type": np.random.choice(account_types, size=365),
-    "Seasonality Index": seasonality_indices,
-    "Payment Delay (days)": payment_delays,
-    "Discount Applied (%)": discounts_applied
-})
+# Load the existing dataset
+existing_data = pd.read_csv("/content/preprocessed_cash_flow.csv")
 
 # Save data to SQLite database
 conn = sqlite3.connect('cash_flow_data.db')
-data.to_sql('cash_flow', conn, if_exists='replace', index=False)
+existing_data.to_sql('cash_flow', conn, if_exists='replace', index=False)
 conn.close()
 
 # Initialize the Dash app
@@ -100,8 +75,8 @@ app.layout = dbc.Container(
                                     html.Label("Select Date Range:", style={"font-weight": "bold"}),
                                     dcc.DatePickerRange(
                                         id="date-range-picker",
-                                        start_date=data["Date"].min(),
-                                        end_date=data["Date"].max(),
+                                        start_date=existing_data["Date"].min(),
+                                        end_date=existing_data["Date"].max(),
                                         display_format="YYYY-MM-DD",
                                         style={"width": "100%"}
                                     ),
